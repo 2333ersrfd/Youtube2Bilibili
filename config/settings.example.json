@@ -1,0 +1,35 @@
+{
+  "api_base": "http://127.0.0.1:8000",
+  "target_language": "简体中文",
+  "enable_dubbing": false,
+  "burn_subtitles": true,
+  "resolution": "1080",
+  "keywords": ["AI 指南", "Python 教程"],
+  "openai": {
+    "base_url": "http://127.0.0.1:8001/v1",
+    "api_key": "sk-xxxxx",
+    "model": "gpt-4o-mini"
+  },
+  "youtube": {
+    "search_region": "US",
+    "max_results_per_keyword": 5,
+    "published_after_days": 365,
+    "blacklist_channels": [],
+    "min_duration_sec": 60,
+    "max_duration_sec": 3600
+  },
+  "bilibili": {
+    "check_region": "CN",
+    "duplicate_threshold": 0.82
+  },
+  "paths": {
+    "workspace": "workspace",
+    "downloads": "workspace/downloads",
+    "covers": "workspace/covers",
+    "uploads_cache": "workspace/uploads"
+  },
+  "history_file": "workspace/history.jsonl"
+  ,
+  "upload_retry_attempts": 3,
+  "upload_retry_backoff_sec": 20
+}
