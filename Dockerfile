@@ -10,7 +10,7 @@ ENV PIP_NO_CACHE_DIR=1 \
 # Basic OS deps; ffmpeg is useful for media handling (biliup/yt-dlp)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates curl ffmpeg wget nano \
+        ca-certificates curl ffmpeg wget nano xz-utils\
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
