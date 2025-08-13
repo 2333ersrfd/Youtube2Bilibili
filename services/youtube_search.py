@@ -24,14 +24,25 @@ class YouTubeVideo:
 def search_videos(keyword: str, max_results: int = 5, region: str = "US") -> List[YouTubeVideo]:
     # yt-dlp supports ytsearchN:keyword pattern
     query = f"ytsearch{max_results}:{keyword}"
-    cmd = [
-        "yt-dlp",
-        "--dump-json",
-        "--skip-download",
-        "--no-warnings",
-        "--default-search", "ytsearch",
-        query,
-    ]
+    if os.path.exists("cookies.txt"):
+        cmd = [
+            "yt-dlp",
+            "--dump-json",
+            "--skip-download",
+            "--no-warnings",
+            "--default-search", "ytsearch",
+            "--cookies", "cookies.txt",
+            query,
+        ]
+    else:
+        cmd = [
+            "yt-dlp",
+            "--dump-json",
+            "--skip-download",
+            "--no-warnings",
+            "--default-search", "ytsearch",
+            query,
+        ]
     proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
     videos: List[YouTubeVideo] = []
     if proc.returncode != 0:
