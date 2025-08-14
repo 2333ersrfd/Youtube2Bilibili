@@ -9,9 +9,6 @@ from datetime import datetime, timedelta
 import time
 import requests
 
-from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
-
 # Ensure project root is on sys.path for `services` imports
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -53,47 +50,40 @@ def check_tool_available(cmd: str) -> bool:
 
 
 def wait_task_with_progress(api: VideoLingoClient, task_id: str, poll_sec: int = 3, timeout_sec: int = 36000):
-    console = Console()
+    """轮询任务状态：不显示进度条，仅在 step 变化时打印一行状态。"""
     start = time.time()
-    with Progress(
-        SpinnerColumn(style="cyan"),
-        TextColumn("[bold blue]{task.fields[step]}"),
-        BarColumn(bar_width=40),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TimeElapsedColumn(),
-        TextColumn("{task.fields[msg]}",),
-        console=console,
-        transient=True,
-    ) as progress:
-        t = progress.add_task("processing", total=100, step="初始化", msg="任务已创建…")
-        while True:
-            try:
-                s = api.get_status(task_id)
-            except Exception as e:
-                # 网络抖动时显示提示但继续重试
-                progress.update(t, msg=f"网络重试中: {e}")
-                time.sleep(min(10, poll_sec))
-                continue
+    last_step = None
+    while True:
+        try:
+            s = api.get_status(task_id)
+        except Exception:
+            # 静默网络抖动；稍后重试
+            time.sleep(min(10, poll_sec))
+            continue
 
-            status = s.get("status")
-            prog = s.get("progress")
-            step = s.get("current_step") or ""
-            msg = s.get("message") or ""
-            try:
-                pct = max(0, min(100, int(prog))) if isinstance(prog, int) else 0
-            except Exception:
+        status = s.get("status")
+        prog = s.get("progress")
+        step = s.get("current_step") or ""
+        msg = s.get("message") or ""
+        try:
+            if isinstance(prog, (int, float)):
+                pct = max(0, min(100, int(prog)))
+            else:
                 pct = 0
-            progress.update(t, completed=pct, step=step, msg=msg)
+        except Exception:
+            pct = 0
 
-            if status in ("completed", "failed"):
-                # 最后更新一次完整状态
-                progress.update(t, completed=100 if status == "completed" else pct, step=step, msg=msg)
-                return s
+        if step != last_step:
+            print(f"  [{pct}%] {step} - {msg}")
+            last_step = step
 
-            if time.time() - start > timeout_sec:
-                return {"status": "failed", "message": "超时", "progress": pct}
+        if status in ("completed", "failed"):
+            return s
 
-            time.sleep(poll_sec)
+        if time.time() - start > timeout_sec:
+            return {"status": "failed", "message": "超时", "progress": pct}
+
+        time.sleep(poll_sec)
 
 
 def download_cover(youtube_url: str, out_dir: Path) -> Path:

@@ -2,3 +2,5 @@ requests>=2.31.0
 rich>=13.7.0
 lxml>=4.9.3
 openai>=1.35.0
+
+

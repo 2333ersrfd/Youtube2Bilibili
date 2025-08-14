@@ -1,6 +1,7 @@
-from typing import List, Dict, Optional, cast, Any
+from typing import List, Dict, Optional, cast, Any, Callable
 from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
+import time
 
 TITLE_TAGS_PROMPT = """
 你是资深的新媒体编辑。根据提供的视频原标题与中文字幕，生成：
@@ -15,12 +16,27 @@ TITLE_TAGS_PROMPT = """
 
 
 class AIClient:
-    def __init__(self, base_url: str, api_key: str, model: str = "gpt-4o-mini"):
-        self.client = OpenAI(base_url=base_url, api_key=api_key)
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        model: str = "gpt-4o-mini",
+        request_timeout_sec: float = 60.0,
+        total_timeout_sec: float = 600.0,
+        retries: int = 10,
+        retry_backoff_sec: float = 5.0,
+    ):
+        # set small client-level retry to 0; we handle retries ourselves
+        self.client = OpenAI(base_url=base_url, api_key=api_key, max_retries=0)
         self.model = model
+        self.request_timeout = float(request_timeout_sec)
+        self.total_timeout = float(total_timeout_sec)
+        self.max_retries = int(retries)
+        self.retry_backoff = float(retry_backoff_sec)
 
     def chat(self, messages: List[Dict[str, str]], temperature: float = 0.7) -> str:
-        resp = self.client.chat.completions.create(
+        c = self.client.with_options(timeout=self.request_timeout)
+        resp = c.chat.completions.create(
             model=self.model,
             messages=cast(List[ChatCompletionMessageParam], messages),
             temperature=temperature,
@@ -28,7 +44,45 @@ class AIClient:
         content = resp.choices[0].message.content or ""
         return content.strip()
 
-    def chat_json(self, messages: List[Dict[str, str]], temperature: float = 0.5, retries: int = 3) -> Dict[str, Any]:
+    def chat_stream(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.7,
+        on_delta: Optional[Callable[[str], None]] = None,
+    ) -> str:
+        """Stream tokens from the model; returns the full text at the end.
+        on_delta(text_chunk) will be called for each non-empty piece.
+        Enforces a total timeout as a safety net.
+        """
+        c = self.client.with_options(timeout=self.request_timeout)
+        start = time.monotonic()
+        buf_parts: List[str] = []
+        stream = c.chat.completions.create(
+            model=self.model,
+            messages=cast(List[ChatCompletionMessageParam], messages),
+            temperature=temperature,
+            stream=True,
+        )
+        for ev in stream:
+            # total timeout guard
+            if (time.monotonic() - start) > self.total_timeout:
+                raise TimeoutError(f"AI 流式请求超时（> {self.total_timeout}s）")
+            try:
+                delta = ev.choices[0].delta
+                piece = getattr(delta, "content", None)
+            except Exception:
+                piece = None
+            if piece:
+                buf_parts.append(piece)
+                if on_delta:
+                    try:
+                        on_delta(piece)
+                    except Exception:
+                        pass
+        return "".join(buf_parts).strip()
+
+    def chat_json(self, messages: List[Dict[str, str]], temperature: float = 0.5, retries: Optional[int] = None, stream: bool = True,
+                  on_stream: Optional[Callable[[str], None]] = None) -> Dict[str, Any]:
         """Ask model to return pure JSON and parse it with retry.
         We enforce: only JSON, no markdown fences, no extra text.
         """
@@ -41,9 +95,19 @@ class AIClient:
         }
         msgs: List[Dict[str, str]] = [sys_prefix] + messages
         last_err: Optional[Exception] = None
-        for i in range(retries):
+        max_tries = self.max_retries if retries is None else int(retries)
+        backoff = self.retry_backoff
+        start = time.monotonic()
+        for i in range(max_tries):
             try:
-                txt = self.chat(msgs, temperature=temperature)
+                remaining = self.total_timeout - (time.monotonic() - start)
+                if remaining <= 0:
+                    raise TimeoutError(f"AI 请求总超时（> {self.total_timeout}s），已放弃。")
+                print(f"AI 请求尝试 {i + 1}/{max_tries}...")
+                if stream:
+                    txt = self.chat_stream(msgs, temperature=temperature, on_delta=on_stream)
+                else:
+                    txt = self.chat(msgs, temperature=temperature)
                 data = self._extract_json(txt)
                 if isinstance(data, dict):
                     return data
@@ -52,11 +116,15 @@ class AIClient:
                     return {"list": data}
             except Exception as e:
                 last_err = e
+                print(f"AI 请求失败: {e}")
                 # 追加提醒并重试
                 msgs.append({
                     "role": "system",
                     "content": "请仅输出 JSON 对象，不要附加说明或 Markdown。",
                 })
+                if i < max_tries - 1:
+                    time.sleep(min(backoff, max(0.0, self.total_timeout)))
+                    backoff = min(backoff * 2, 60.0)
         if last_err:
             raise last_err
         return {}
@@ -119,3 +187,5 @@ class AIClient:
         if "reason" not in data:
             data["reason"] = ""
         return data
+
+

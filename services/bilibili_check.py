@@ -50,9 +50,11 @@ def check_duplicate(title: str, translator: Optional[AIClient] = None) -> Dict[s
     zh_title: Optional[str] = None
     if translator:
         try:
+            print("翻译标题...")
             zh_title = translator.translate_title_to_zh(title)
         except Exception:
             zh_title = None
+    print(f"翻译结果: {zh_title},爬取B站...")
     query_title = zh_title or title
 
     candidates: List[Dict[str, str]] = []
@@ -91,6 +93,7 @@ def check_duplicate(title: str, translator: Optional[AIClient] = None) -> Dict[s
     result: Dict[str, Any] = {"duplicate": False, "reason": "", "matched": [], "zh_title": query_title, "candidates": candidates}
     if translator:
         try:
+            print("AI 判重...")
             verdict = translator.judge_duplicate(original_title=title, zh_title=query_title, candidates=candidates)
             # 合并 verdict
             result.update({k: v for k, v in verdict.items() if k in ("duplicate", "reason", "matched")})
