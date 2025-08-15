@@ -89,14 +89,25 @@ def wait_task_with_progress(api: VideoLingoClient, task_id: str, poll_sec: int =
 def download_cover(youtube_url: str, out_dir: Path) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "cover.jpg"
-    cmd = [
-        "yt-dlp",
-        "--skip-download",
-        "--write-thumbnail",
-        "--convert-thumbnails", "jpg",
-        "-o", str(out_dir / "%(.id)s.%(ext)s"),
-        youtube_url,
-    ]
+    if os.path.exists("cookies.txt"):
+        cmd = [
+            "yt-dlp",
+            "--skip-download",
+            "--write-thumbnail",
+            "--convert-thumbnails", "jpg",
+            "--cookies", "cookies.txt",
+            "-o", str(out_dir / "%(id)s.%(ext)s"),
+            youtube_url,
+        ]
+    else:
+        cmd = [
+            "yt-dlp",
+            "--skip-download",
+            "--write-thumbnail",
+            "--convert-thumbnails", "jpg",
+            "-o", str(out_dir / "%(.id)s.%(ext)s"),
+            youtube_url,
+        ]
     subprocess.run(cmd, check=False)
     # pick first jpg
     for f in out_dir.glob("*.jpg"):
