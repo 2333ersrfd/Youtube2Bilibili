@@ -3,11 +3,16 @@
 本项目根据多个关键词搜索 YouTube，查重 B 站后，调用本地 VideoLingo FastAPI（见 `api_server.py`）进行自动加字幕/翻译，再使用 `biliup` 命令行上传到 B 站。标题/标签/描述通过兼容 OpenAI 格式的接口自动生成。
 
 ## 使用
-```bash
-docker run -itd --name Youtube2Bilibili --link Videolingo \
-  -v /Docker/youtube2bilibili/config:/app/config \
-  -v /Docker/youtube2bilibili/workspace:/app/workspace \
-  -e http_proxy="http://192.168.1.100:7890" -e https_proxy="http://192.168.1.100:7890" \
-  -e NO_PROXY="Videolingo,127.0.0.1,localhost" -e no_proxy="Videolingo,127.0.0.1,localhost" \
-  --restart always yht0511/youtube2bilibili:latest
-```
+克隆仓库
+docker 下载videolingo镜像，创建容器
+配置settings.json文件
+挂载文件夹
+
+可能会遇到的问题：
+运行videolingo后，打开web页面，调用api；
+安装ping命令
+bash
+docker exec -it your-container-name /bin/bash
+apt-get update && apt-get install -y iputils-ping
+
+添加biliup到系统环境
